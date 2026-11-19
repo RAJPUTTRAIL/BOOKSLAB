@@ -6,7 +6,7 @@ import { mkdir, readdir, unlink, writeFile } from "fs/promises";
 import path from "path";
 import bcrypt from "bcryptjs";
 import { connectDB } from "./mongo";
-import { ActivitySession, Book, BookRequest, Drop, Order, SearchEvent, SecurityLog, SiteContent, StoreSettings, User, type BookDoc } from "./models";
+import { ActivitySession, Book, BookRequest, ContactMessage, Drop, Order, SearchEvent, SecurityLog, SiteContent, StoreSettings, User, type BookDoc } from "./models";
 import { coverSvg } from "./cover-svg";
 
 type Seed = {
@@ -123,7 +123,7 @@ function seedPayment(pickup: boolean, status: string, i: number, total: number, 
 
 export async function seedDatabase() {
   await connectDB();
-  await Promise.all([Order.deleteMany({}), Drop.deleteMany({}), SecurityLog.deleteMany({}), SearchEvent.deleteMany({}), ActivitySession.deleteMany({}), SiteContent.deleteMany({}), StoreSettings.deleteMany({}), BookRequest.deleteMany({}), Book.deleteMany({}), User.deleteMany({})]); // settings fall back to defaults
+  await Promise.all([Order.deleteMany({}), Drop.deleteMany({}), SecurityLog.deleteMany({}), SearchEvent.deleteMany({}), ActivitySession.deleteMany({}), SiteContent.deleteMany({}), StoreSettings.deleteMany({}), BookRequest.deleteMany({}), ContactMessage.deleteMany({}), Book.deleteMany({}), User.deleteMany({})]); // settings fall back to defaults
   // Make sure unique / partial indexes exist before inserting (idempotent).
   await Promise.all([Book, User, Order].map((m) => m.syncIndexes()));
 

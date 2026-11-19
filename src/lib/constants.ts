@@ -32,3 +32,6 @@ export const RETURN_FLOW: Record<string, readonly string[]> = {
 
 // ── "Can't find a book?" requests ──
 export const BOOK_REQUEST_STATUSES = ["New", "Sourcing", "Available at Store", "Not Available", "Fulfilled"] as const;
+
+// ── Contact form ──
+export const CONTACT_TOPICS = ["Order help", "Book availability", "Bulk / institutional order", "Returns", "Something else"] as const;

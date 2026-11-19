@@ -96,3 +96,18 @@ export function orderConfirmationEmail(o: OrderEmailInput) {
   ].join("\n");
   return { subject, html, text };
 }
+
+export type ContactEmailInput = { name: string; email: string; phone: string; topic: string; orderNumber: string; message: string; signedIn: boolean };
+
+/** Notification to the store inbox; Reply-To is set to the customer so staff can just hit Reply. */
+export function contactNotificationEmail(c: ContactEmailInput) {
+  const subject = `[Contact] ${c.topic}${c.orderNumber ? ` · ${c.orderNumber}` : ""} — ${c.name}`;
+  const row = (k: string, v: string) => (v ? `<div style="font-size:14px;padding:3px 0;"><span style="color:#64748B;display:inline-block;width:96px;">${k}</span>${esc(v)}</div>` : "");
+  const html = layout(subject, `
+    <h1 style="font-size:18px;margin:0 0 14px;">New message from the website</h1>
+    ${row("Name", c.name)}${row("Email", c.email)}${row("Phone", c.phone)}${row("Topic", c.topic)}${row("Order", c.orderNumber)}${row("Account", c.signedIn ? "Signed-in customer" : "Guest")}
+    <div style="background:#F3F2EE;border-radius:8px;padding:14px;margin-top:14px;font-size:14px;line-height:1.6;white-space:pre-wrap;">${esc(c.message)}</div>
+    <p style="font-size:12px;color:#64748B;margin:14px 0 0;">Reply to this email to answer ${esc(c.name.split(" ")[0])} directly.</p>`);
+  const text = [`New message from the website`, ``, `Name: ${c.name}`, `Email: ${c.email}`, ...(c.phone ? [`Phone: ${c.phone}`] : []), `Topic: ${c.topic}`, ...(c.orderNumber ? [`Order: ${c.orderNumber}`] : []), `Account: ${c.signedIn ? "Signed-in customer" : "Guest"}`, ``, c.message].join("\n");
+  return { subject, html, text };
+}

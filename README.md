@@ -31,6 +31,7 @@ To reseed at any time, run `npm run seed`, or with the dev server running: `curl
 | `RESET_CODE_PREVIEW` | `"true"` shows forgot-password codes in the sign-in modal and server console for local testing; set `"false"` in production |
 | `RESEND_API_KEY` | Resend API key for transactional email (password-reset codes, order confirmations). Without it, emails are logged to the terminal. |
 | `EMAIL_FROM` | Sender, default `Bookslab <onboarding@resend.dev>` — that sender only delivers to your own Resend account email; verify a domain at resend.com/domains to email customers. |
+| `CONTACT_TO` | Inbox for contact-form messages (Reply-To is the customer). With `onboarding@resend.dev` it must be your Resend account email. |
 | `NEXT_PUBLIC_SITE_URL` | Base URL for links in emails (default `http://localhost:3000`) |
 | `SEED_TOKEN` | Optional. Allows `POST /api/seed` in production with the header `x-seed-token` |
 
@@ -76,6 +77,13 @@ To reseed at any time, run `npm run seed`, or with the dev server running: `curl
 - **Customer:** `/request-book` (linked in the header and footer) — book title, author/publisher, ISBN, edition, quantity, pickup vs delivery, notes, plus name / mobile / email (pre-filled when signed in). A search with no results offers **Request this book**, carrying the search text into the title. Signed-in customers follow their requests under **My Orders → My Book Requests** (status, quoted price, store reply).
 - **Stored** in `BookRequest` (`src/lib/models.ts`): `userId` (when signed in), `customerName`, `phone`, `email`, `bookTitle`, `authorOrPublisher`, `isbn`, `editionOrYear`, `quantity`, `preferredFulfillment`, `notes`, `status` (New → Sourcing → Available at Store / Not Available → Fulfilled), `estimatedPrice`, `adminReply`, `createdAt`. `POST /api/book-requests` is public (honeypot field + max 5 requests per phone per hour); `GET` returns the signed-in customer's own requests.
 - **Admin → Book Requests** (badge = New): newest first, one-click WhatsApp reply pre-filled with the title (and price once available), update modal for status / estimated price (required for "Available at Store") / reply, and **Convert to Store Catalog**, which opens Add Book pre-filled with title, author and ISBN.
+
+## Email (Resend)
+
+- **Helper:** `src/lib/email.ts` → `sendEmail({ to, subject, html, text, replyTo?, tag? })`. Never throws; returns `{ sent: true, id }` or `{ sent: false, reason }`. Without a real `RESEND_API_KEY` (or with the `re_123456789` placeholder) it prints the email to the terminal instead.
+- **Templates:** `src/lib/email-templates.ts` — password-reset code, order confirmation, contact-form notification (HTML + plain text).
+- **Contact form:** `/contact` → `POST /api/contact` (zod-validated in `src/lib/contact.ts`, honeypot, 5 messages per email/IP per hour). Each message is saved to `ContactMessage` first (with `emailed` / `emailError`), then emailed to `CONTACT_TO` with Reply-To set to the customer.
+- **Resend setup:** create an API key at resend.com/api-keys (Sending access). `onboarding@resend.dev` only delivers to your own account email — add and verify your domain at resend.com/domains (DNS: SPF, DKIM, optional DMARC), then set `EMAIL_FROM="Bookslab <orders@yourdomain.in>"`.
 
 ## Carts are per account
 

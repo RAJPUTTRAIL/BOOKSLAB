@@ -261,6 +261,28 @@ const bookRequestSchema = new Schema(
 bookRequestSchema.index({ createdAt: -1 });
 export const BookRequest = model("BookRequest", bookRequestSchema);
 
+// ─────────────────────────── Contact messages ───────────────────────────
+
+const contactMessageSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, ref: "User", default: null },
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: true, lowercase: true, trim: true },
+    phone: { type: String, default: "" },
+    topic: { type: String, required: true },
+    orderNumber: { type: String, default: "" },
+    message: { type: String, required: true },
+    ip: { type: String, default: null },
+    // Delivery to the store inbox via Resend
+    emailed: { type: Boolean, default: false },
+    emailId: { type: String, default: null },
+    emailError: { type: String, default: null },
+  },
+  { timestamps: true },
+);
+contactMessageSchema.index({ email: 1, createdAt: -1 });
+export const ContactMessage = model("ContactMessage", contactMessageSchema);
+
 // ─────────────────────────── Store settings (singleton) ───────────────────────────
 
 const storeSettingsSchema = new Schema(

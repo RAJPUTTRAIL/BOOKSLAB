@@ -12,15 +12,26 @@ import { Resend } from "resend";
 
 export const EMAIL_FROM = process.env.EMAIL_FROM || "Bookslab <onboarding@resend.dev>";
 
+/** Where store notifications (e.g. contact-form messages) go. With onboarding@resend.dev this must be your Resend account's email. */
+export const CONTACT_TO = process.env.CONTACT_TO || "hello@bookslab.in";
+
+const PLACEHOLDER_KEY = "re_123456789"; // the value in .env.example
+const apiKey = () => {
+  const k = process.env.RESEND_API_KEY?.trim();
+  return k && k !== PLACEHOLDER_KEY ? k : null;
+};
+
 let client: Resend | null = null;
-const resend = () => (process.env.RESEND_API_KEY ? (client ??= new Resend(process.env.RESEND_API_KEY)) : null);
+const resend = () => { const k = apiKey(); return k ? (client ??= new Resend(k)) : null; };
 
 export type EmailResult = { sent: true; id: string } | { sent: false; reason: string };
 
-export async function sendEmail(msg: { to: string; subject: string; html: string; text: string; tag?: string }): Promise<EmailResult> {
+export type EmailMessage = { to: string | string[]; subject: string; html: string; text: string; replyTo?: string; tag?: string };
+
+export async function sendEmail(msg: EmailMessage): Promise<EmailResult> {
   const r = resend();
   if (!r) {
-    console.log(`\n┌──────── Email not sent (RESEND_API_KEY is missing) ────────\n│ To: ${msg.to}\n│ Subject: ${msg.subject}\n│\n${msg.text.split("\n").map((l) => `│ ${l}`).join("\n")}\n└────────────────────────────────────────────────────────────\n`);
+    console.log(`\n┌──────── Email not sent (RESEND_API_KEY is missing) ────────\n│ To: ${[msg.to].flat().join(", ")}${msg.replyTo ? `\n│ Reply-To: ${msg.replyTo}` : ""}\n│ Subject: ${msg.subject}\n│\n${msg.text.split("\n").map((l) => `│ ${l}`).join("\n")}\n└────────────────────────────────────────────────────────────\n`);
     return { sent: false, reason: "RESEND_API_KEY is not set" };
   }
   try {
@@ -30,6 +41,7 @@ export async function sendEmail(msg: { to: string; subject: string; html: string
       subject: msg.subject,
       html: msg.html,
       text: msg.text,
+      ...(msg.replyTo ? { replyTo: msg.replyTo } : {}),
       ...(msg.tag ? { tags: [{ name: "category", value: msg.tag }] } : {}),
     });
     if (error || !data) {
@@ -43,4 +55,4 @@ export async function sendEmail(msg: { to: string; subject: string; html: string
   }
 }
 
-export const emailConfigured = () => !!process.env.RESEND_API_KEY;
+export const emailConfigured = () => !!apiKey();

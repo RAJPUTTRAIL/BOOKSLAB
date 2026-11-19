@@ -31,6 +31,7 @@ export function Footer() {
               <li className="mb-2"><Link href="/#kit-builder" className="link-secondary text-decoration-none">Build an exam kit</Link></li>
               <li className="mb-2"><Link href="/store" className="link-secondary text-decoration-none">Visit the CP store</Link></li>
               <li className="mb-2"><Link href="/request-book" className="link-secondary text-decoration-none">Request a Book</Link></li>
+              <li className="mb-2"><Link href="/contact" className="link-secondary text-decoration-none">Contact us</Link></li>
               <li><Link href="/account" className="link-secondary text-decoration-none">Your account</Link></li>
             </ul>
           </div>
