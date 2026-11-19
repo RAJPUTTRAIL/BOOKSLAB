@@ -7,7 +7,7 @@ import { parseIdentifier } from "@/lib/auth/identifier";
 import { findUserById } from "@/lib/auth/session";
 import { RESET_TTL_MIN, issueResetCode, resetPreview } from "@/lib/auth/reset";
 import { logSecurity } from "@/lib/security-log";
-import { sendEmail } from "@/lib/email";
+import { diagnostics, exposeEmailDiagnostics, sendEmail, type EmailResult } from "@/lib/email";
 import { resetCodeEmail } from "@/lib/email-templates";
 
 const schema = z.object({ identifier: z.string().trim().min(3, "Enter your registered email or mobile number") });
@@ -36,13 +36,19 @@ export const POST = handle(async (req: Request) => {
 
   // Deliver the code. sendEmail falls back to a terminal log when RESEND_API_KEY is missing.
   let delivery = "not delivered: account has no email (SMS isn't set up)";
+  let email: EmailResult | null = null;
   if (user.email) {
-    const r = await sendEmail({ to: user.email, tag: "password-reset", ...resetCodeEmail({ name: user.name, code, ttlMinutes: RESET_TTL_MIN }) });
-    delivery = r.sent ? `emailed (${r.id})` : `email not sent: ${r.reason}`;
+    email = await sendEmail({ to: user.email, tag: "password-reset", ...resetCodeEmail({ name: user.name, code, ttlMinutes: RESET_TTL_MIN }) });
+    delivery = email.sent ? `emailed (${email.id})` : `email not sent: ${email.reason}`;
   } else {
     console.log(`\n┌──────── Password reset code (no email on account — add an SMS provider) ────────\n│ ${identifier}: ${code}\n└────────────────────────────────────────────────────────────\n`);
   }
   if (resetPreview() && user.email) console.log(`\n┌──────── Bookslab password reset (dev preview) ────────\n│ Code for ${identifier}: ${code}\n└────────────────────────────────────────────────────────\n`);
   await logSecurity("PASSWORD_RESET_REQUESTED", { userId: user.id, identifier, detail: `Reset code ${delivery}` });
-  return NextResponse.json({ ok: true, message, ttlMinutes: RESET_TTL_MIN, ...(resetPreview() ? { devCode: code } : {}) });
+  return NextResponse.json({
+    ok: true, message, ttlMinutes: RESET_TTL_MIN,
+    ...(resetPreview() ? { devCode: code } : {}),
+    // Dev-only delivery report (never in production: the reply must look the same for every input).
+    ...(exposeEmailDiagnostics() ? { email: email ? diagnostics(email) : { sent: false, error: "Account has no email address", code: "no_email" } } : {}),
+  });
 });

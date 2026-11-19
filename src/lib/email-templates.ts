@@ -111,3 +111,20 @@ export function contactNotificationEmail(c: ContactEmailInput) {
   const text = [`New message from the website`, ``, `Name: ${c.name}`, `Email: ${c.email}`, ...(c.phone ? [`Phone: ${c.phone}`] : []), `Topic: ${c.topic}`, ...(c.orderNumber ? [`Order: ${c.orderNumber}`] : []), `Account: ${c.signedIn ? "Signed-in customer" : "Guest"}`, ``, c.message].join("\n");
   return { subject, html, text };
 }
+
+export function welcomeEmail(p: { name: string; identifier: string }) {
+  const first = p.name.split(" ")[0];
+  const subject = `Welcome to Bookslab, ${first}`;
+  const html = layout(subject, `
+    <h1 style="font-size:18px;margin:0 0 12px;">Welcome, ${esc(first)}</h1>
+    <p style="margin:0 0 14px;line-height:1.6;">Your Bookslab account is ready. You sign in with <strong>${esc(p.identifier)}</strong> and your password.</p>
+    <ul style="margin:0 0 18px;padding-left:18px;line-height:1.8;font-size:14px;">
+      <li>Law, finance &amp; tax, academic and technology titles — current editions</li>
+      <li>Free pickup from our Connaught Place store, or delivery across Delhi NCR</li>
+      <li>Can&rsquo;t find a title? Our sourcing desk will find it for you</li>
+    </ul>
+    <p style="margin:0;"><a href="${SITE()}/search" style="background:#1B365D;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:14px;display:inline-block;">Browse the catalog</a></p>
+    <p style="font-size:12px;color:#64748B;margin:18px 0 0;">Didn&rsquo;t create this account? Reply to this email and we&rsquo;ll look into it.</p>`);
+  const text = `Welcome to Bookslab, ${first}!\n\nYour account is ready. You sign in with ${p.identifier} and your password.\n\nBrowse the catalog: ${SITE()}/search\n\nDidn't create this account? Reply to this email.`;
+  return { subject, html, text };
+}

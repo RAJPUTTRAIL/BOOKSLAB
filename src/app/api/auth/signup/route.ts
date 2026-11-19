@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { connectDB } from "@/lib/mongo";
@@ -9,6 +9,8 @@ import { parseIdentifier } from "@/lib/auth/identifier";
 import { publicUser } from "@/lib/auth/public-user";
 import { passwordSchema } from "@/lib/auth/password";
 import { logSecurity } from "@/lib/security-log";
+import { diagnostics, exposeEmailDiagnostics, sendEmail, type EmailResult } from "@/lib/email";
+import { welcomeEmail } from "@/lib/email-templates";
 
 const schema = z.object({
   name: z.string().trim().min(2, "Please enter your full name").max(80),
@@ -28,5 +30,13 @@ export const POST = handle(async (req: Request) => {
   const user = (await findUserById(String(created._id)))!;
   await createSession({ id: user.id, role: user.role ?? "customer", name: user.name, tokenVersion: user.tokenVersion });
   await logSecurity("SIGNUP", { userId: user.id, identifier: data.identifier, detail: "Account created and signed in" });
-  return NextResponse.json({ ok: true, user: publicUser(user) });
+  // Welcome email. In development we wait for Resend so the response says exactly what happened;
+  // in production it's sent after the response so sign-up never waits on email.
+  let email: EmailResult | null = null;
+  if (user.email) {
+    const send = () => sendEmail({ to: user.email!, tag: "welcome", ...welcomeEmail({ name: user.name, identifier: user.email! }) });
+    if (exposeEmailDiagnostics()) email = await send();
+    else after(send);
+  }
+  return NextResponse.json({ ok: true, user: publicUser(user), ...(email ? { email: diagnostics(email) } : {}) });
 });

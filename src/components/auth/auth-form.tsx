@@ -29,6 +29,7 @@ export function AuthForm({ initialTab = "signup", onDone, compactHeader }: { ini
   const [resetId, setResetId] = useState("");
   const [resetInfo, setResetInfo] = useState("");
   const [devCode, setDevCode] = useState<string | null>(null);
+  const [emailIssue, setEmailIssue] = useState<string | null>(null); // dev-only: why the reset email didn't go out
   const [code, setCode] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
@@ -46,9 +47,10 @@ export function AuthForm({ initialTab = "signup", onDone, compactHeader }: { ini
     e?.preventDefault();
     setError(""); setBusy(true);
     try {
-      const d = await api<{ message: string; devCode?: string }>("/api/auth/forgot-password", { identifier: resetId });
+      const d = await api<{ message: string; devCode?: string; email?: { sent: boolean; error?: string; hint?: string } }>("/api/auth/forgot-password", { identifier: resetId });
       setResetInfo(d.message);
       setDevCode(d.devCode ?? null);
+      setEmailIssue(d.email && !d.email.sent ? `${d.email.error ?? "Email not sent."}${d.email.hint ? ` — ${d.email.hint}` : ""}` : null);
       setCode("");
       setView("reset");
     } catch (err) {
@@ -123,6 +125,11 @@ export function AuthForm({ initialTab = "signup", onDone, compactHeader }: { ini
         <button type="button" className="btn btn-link btn-sm px-0 text-muted mb-2" onClick={() => { setView("forgot"); setError(""); }}><i className="bi bi-arrow-left me-1" />Use a different email or mobile</button>
         <h3 className="h5 mb-1">Set a new password</h3>
         <p className="text-muted small mb-3">{resetInfo}</p>
+        {emailIssue && (
+          <div className="alert alert-warning small py-2" role="note" data-email-issue>
+            <strong>Development: the email wasn&apos;t delivered.</strong> {emailIssue}
+          </div>
+        )}
         {devCode && (
           <div className="alert alert-info small py-2 d-flex align-items-center gap-2" role="note">
             <i className="bi bi-tools" />

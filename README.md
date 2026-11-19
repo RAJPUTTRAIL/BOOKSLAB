@@ -83,6 +83,8 @@ To reseed at any time, run `npm run seed`, or with the dev server running: `curl
 - **Helper:** `src/lib/email.ts` → `sendEmail({ to, subject, html, text, replyTo?, tag? })`. Never throws; returns `{ sent: true, id }` or `{ sent: false, reason }`. Without a real `RESEND_API_KEY` (or with the `re_123456789` placeholder) it prints the email to the terminal instead.
 - **Templates:** `src/lib/email-templates.ts` — password-reset code, order confirmation, contact-form notification (HTML + plain text).
 - **Contact form:** `/contact` → `POST /api/contact` (zod-validated in `src/lib/contact.ts`, honeypot, 5 messages per email/IP per hour). Each message is saved to `ContactMessage` first (with `emailed` / `emailError`), then emailed to `CONTACT_TO` with Reply-To set to the customer.
+- **Sign-up** sends a welcome email; **Forgot password** emails the reset code. In development the API response includes an `email` report (`sent`, `error`, `code`, `hint`) and the reset modal shows why an email wasn't delivered; in production replies stay identical for every input and failures are logged (`[email] ✗ …` with a fix).
+- **Test:** `npm run email:test -- you@example.com` sends a sample welcome + reset email and prints Resend's exact response (`delivered@resend.dev` is Resend's safe test inbox).
 - **Resend setup:** create an API key at resend.com/api-keys (Sending access). `onboarding@resend.dev` only delivers to your own account email — add and verify your domain at resend.com/domains (DNS: SPF, DKIM, optional DMARC), then set `EMAIL_FROM="Bookslab <orders@yourdomain.in>"`.
 
 ## Carts are per account
