@@ -145,3 +145,14 @@ export function welcomeEmail(p: { name: string; email: string; phone: string | n
   ].join("\n");
   return { subject, html, text };
 }
+
+export function verifyEmailCode(p: { name: string; code: string; ttlMinutes: number }) {
+  const subject = "Verify your Bookslab account"; // the code stays out of the subject (and out of server logs)
+  const html = layout(subject, `
+    <h1 style="font-size:18px;margin:0 0 12px;">Confirm your email</h1>
+    <p style="margin:0 0 16px;line-height:1.6;">Hello ${esc(p.name.split(" ")[0])}, enter this code in the Bookslab sign-up window to finish creating your account:</p>
+    <div style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:32px;font-weight:700;letter-spacing:.35em;background:#F3F2EE;border-radius:8px;padding:14px 0;text-align:center;">${esc(p.code)}</div>
+    <p style="margin:16px 0 0;font-size:13px;color:#64748B;line-height:1.6;">The code expires in ${p.ttlMinutes} minutes. If you didn't try to create a Bookslab account, you can ignore this email.</p>`);
+  const text = `Verify your Bookslab account\n\nHello ${p.name.split(" ")[0]}, your verification code is: ${p.code}\n\nIt expires in ${p.ttlMinutes} minutes. If you didn't try to create a Bookslab account, ignore this email.`;
+  return { subject, html, text };
+}

@@ -44,7 +44,7 @@ export async function consumeResetCode(user: { id: string; resetPasswordToken?: 
   // Conditional on the same token, so one code can only ever be used once.
   const r = await User.updateOne(
     { _id: user.id, resetPasswordToken: user.resetPasswordToken },
-    { $set: { passwordHash: await bcrypt.hash(newPassword, 10), resetPasswordToken: null, resetPasswordExpires: null, resetPasswordAttempts: 0, resetPasswordRequestedAt: null }, $inc: { tokenVersion: 1 } },
+    { $set: { passwordHash: await bcrypt.hash(newPassword, 10), resetPasswordToken: null, resetPasswordExpires: null, resetPasswordAttempts: 0, resetPasswordRequestedAt: null, isEmailVerified: true, verificationOtp: null, verificationOtpExpires: null }, $inc: { tokenVersion: 1 } }, // the emailed code proves the inbox
   );
   if (!r.modifiedCount) throw invalid;
 }

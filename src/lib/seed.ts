@@ -167,9 +167,9 @@ export async function seedDatabase() {
     { _id: "BANNER", value: {} },
   ]);
 
-  const admin = await User.create({ name: "Kabir Anand", email: "admin@bookslab.in", phone: "+919810000001", passwordHash: await bcrypt.hash("Admin@2026", 10), role: "admin" });
+  const admin = await User.create({ name: "Kabir Anand", email: "admin@bookslab.in", phone: "+919810000001", passwordHash: await bcrypt.hash("Admin@2026", 10), role: "admin", isEmailVerified: true });
   const riya = await User.create({
-    name: "Riya Sharma", email: "riya@student.du.ac.in", phone: "+919810000002", passwordHash: await bcrypt.hash("Student@2026", 10),
+    name: "Riya Sharma", email: "riya@student.du.ac.in", phone: "+919810000002", passwordHash: await bcrypt.hash("Student@2026", 10), isEmailVerified: true,
     addresses: [
       { label: "College", recipientName: "Riya Sharma", phone: "+919810000002", street: "Room 214, Meghdoot Hostel, North Campus, University of Delhi", city: "Delhi", state: "Delhi", pincode: "110007", isDefault: true },
       { label: "Home", recipientName: "Riya Sharma", phone: "+919810000002", street: "B-14, Hudson Lane, Kamla Nagar", city: "Delhi", state: "Delhi", pincode: "110009", isDefault: false },
@@ -181,7 +181,7 @@ export async function seedDatabase() {
   const others = await User.insertMany(
     first.map((f, i) => ({
       name: `${f} ${last[i % last.length]}`, email: `${f.toLowerCase()}.${last[i % last.length].toLowerCase()}${i}@example.in`, passwordHash: pw,
-      createdAt: new Date(Date.now() - ((i * 3) % 40) * day),
+      isEmailVerified: true, createdAt: new Date(Date.now() - ((i * 3) % 40) * day),
     })),
   );
   const customers = [riya, ...others];

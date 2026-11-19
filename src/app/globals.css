@@ -173,3 +173,6 @@ h1, h2, h3, h4, h5, .display-font { font-family: var(--font-display), var(--bs-f
 .fade-in { animation: bl-fade-in .22s ease-out both; }
 @keyframes bl-fade-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .fade-in { animation: none; } }
+
+/* 6-digit code boxes (email verification) */
+.otp-box { width: 100%; max-width: 3.1rem; height: 3.4rem; text-align: center; font-size: 1.45rem; font-weight: 600; font-variant-numeric: tabular-nums; padding: 0; }

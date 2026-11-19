@@ -77,6 +77,12 @@ const userSchema = new Schema(
     role: { type: String, enum: ["customer", "admin"], default: "customer" },
     // Saved delivery addresses (exactly one isDefault when any exist)
     addresses: { type: [addressSchema], default: [] },
+    // Email verification at sign-up (accounts created before this existed have no field = treated as verified)
+    isEmailVerified: { type: Boolean, default: false },
+    verificationOtp: { type: String, default: null }, // bcrypt hash of the 6-digit code
+    verificationOtpExpires: { type: Date, default: null }, // 10 minutes
+    verificationOtpAttempts: { type: Number, default: 0 },
+    verificationOtpSentAt: { type: Date, default: null }, // 30-second resend cooldown
     // Forgot-password: bcrypt hash of a 6-character code, valid for 15 minutes
     resetPasswordToken: { type: String, default: null },
     resetPasswordExpires: { type: Date, default: null },

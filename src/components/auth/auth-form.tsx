@@ -3,14 +3,15 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useApi, useApp, type SessionUser } from "../providers";
+import { OtpInput } from "./otp-input";
 
 type Tab = "signup" | "signin";
-type View = "form" | "forgot" | "reset";
+type View = "form" | "forgot" | "reset" | "verify";
 type Result = { user: NonNullable<SessionUser> };
 
 const SHOW_DEMO = process.env.NODE_ENV !== "production";
 
-/** Single-step sign-up / sign-in. Used by SignupModal and the /auth page. */
+/** Sign-up (with one-time email verification) and direct sign-in. Used by SignupModal and the /auth page. */
 export function AuthForm({ initialTab = "signup", onDone, compactHeader }: { initialTab?: Tab; onDone: (r: { role: string }) => void; compactHeader?: boolean }) {
   const api = useApi();
   const { toast, setUser } = useApp();
@@ -20,8 +21,48 @@ export function AuthForm({ initialTab = "signup", onDone, compactHeader }: { ini
 
   const [name, setName] = useState("");
   const [identifier, setIdentifier] = useState("");
+  const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
+
+  // Email verification (sign-up step 2)
+  const [verifyEmail, setVerifyEmail] = useState("");
+  const [otp, setOtp] = useState("");
+  const [resendIn, setResendIn] = useState(0);
+  const [verifyNote, setVerifyNote] = useState("");
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
+  const goVerify = (email: string, wait: number, note = "") => {
+    setVerifyEmail(email); setOtp(""); setResendIn(wait); setVerifyNote(note); setError(""); setView("verify");
+  };
+  const signedIn = (u: Result["user"], fresh: boolean) => {
+    setUser(u); // switching identity makes <Providers> drop previous state and load only this user's cart
+    toast({ kind: "success", title: fresh ? `Welcome to Bookslab, ${u.name.split(" ")[0]}` : `Welcome back, ${u.name.split(" ")[0]}` });
+    onDone({ role: u.role });
+  };
+  const verifyCode = async (value?: string) => {
+    const c = value ?? otp;
+    if (!/^\d{6}$/.test(c)) return setError("Enter the 6-digit code from the email.");
+    setBusy(true); setError("");
+    try {
+      const d = await api<Result>("/api/auth/verify-email", { email: verifyEmail, code: c });
+      signedIn(d.user, true);
+    } catch (err) {
+      setError((err as Error).message); setOtp(""); setBusy(false);
+    }
+  };
+  const resendCode = async () => {
+    setError("");
+    try {
+      const d = await api<{ resendIn: number }>("/api/auth/resend-verification", { email: verifyEmail });
+      setResendIn(d.resendIn); setOtp(""); setVerifyNote(`A new code is on its way to ${verifyEmail}.`);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
 
   // Forgot-password flow
   const [view, setView] = useState<View>("form");
@@ -80,22 +121,58 @@ export function AuthForm({ initialTab = "signup", onDone, compactHeader }: { ini
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (tab === "signup" && !pwOk) return setError("Use at least 8 characters, including a letter and a number.");
+    if (tab === "signup") {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(identifier.trim())) return setError("Enter a valid email address — we'll send a verification code to it.");
+      if (!/^[6-9]\d{9}$/.test(phone)) return setError("Enter a valid 10-digit mobile number.");
+      if (!pwOk) return setError("Use at least 8 characters, including a letter and a number.");
+    }
     setBusy(true);
     try {
-      const d = await api<Result>(
-        tab === "signup" ? "/api/auth/signup" : "/api/auth/login",
-        tab === "signup" ? { name, identifier, password } : { identifier, password },
-      );
-      // Switching identity here makes <Providers> drop any previous state and load only this user's cart.
-      setUser(d.user);
-      toast({ kind: "success", title: tab === "signup" ? `Welcome to Bookslab, ${d.user.name.split(" ")[0]}` : `Welcome back, ${d.user.name.split(" ")[0]}` });
-      onDone({ role: d.user.role });
+      if (tab === "signup") {
+        const d = await api<{ email: string; resendIn: number }>("/api/auth/signup", { name, email: identifier.trim(), phone, password });
+        goVerify(d.email, d.resendIn);
+        setBusy(false);
+        return;
+      }
+      const res = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ identifier, password }) });
+      const d = await res.json().catch(() => ({}));
+      if (res.status === 403 && d.code === "EMAIL_NOT_VERIFIED") {
+        goVerify(d.email, d.resendIn ?? 0, "Your email isn't verified yet — enter the code we just sent to finish creating your account.");
+        setBusy(false);
+        return;
+      }
+      if (!res.ok) throw new Error(d.error ?? "Something went wrong. Please try again.");
+      signedIn(d.user, false);
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
     }
   };
+
+  if (view === "verify") {
+    return (
+      <div className="fade-in" data-verify-email>
+        <button type="button" className="btn btn-link btn-sm px-0 text-muted mb-2" onClick={() => { setView("form"); setTab("signup"); setError(""); }}><i className="bi bi-arrow-left me-1" />Use a different email</button>
+        <div className="text-center mb-3">
+          <div className="rounded-circle bg-primary-subtle text-primary d-inline-grid mb-2" style={{ width: 56, height: 56, placeItems: "center" }}><i className="bi bi-envelope-check fs-3" /></div>
+          <h3 className="h5 mb-1">Check your email</h3>
+          <p className="text-muted small mb-0">We sent a 6-digit code to <strong className="text-body" data-verify-target>{verifyEmail}</strong>. It&apos;s valid for 10 minutes.</p>
+        </div>
+        {verifyNote && <div className="alert alert-light border small py-2" role="status">{verifyNote}</div>}
+        <OtpInput value={otp} onChange={(v) => { setOtp(v); setError(""); }} onComplete={(v) => verifyCode(v)} disabled={busy} invalid={!!error} />
+        {error && <div className="text-danger small text-center mt-2" role="alert">{error}</div>}
+        <button type="button" className="btn btn-primary w-100 mt-4 py-2" disabled={busy || otp.length !== 6} onClick={() => verifyCode()}>
+          {busy && <span className="spinner-border spinner-border-sm me-2" />}Verify &amp; Create Account
+        </button>
+        <div className="text-center small mt-3">
+          {resendIn > 0
+            ? <span className="text-muted">Didn&apos;t get it? You can resend in <span className="tabular" data-resend-timer>0:{String(resendIn).padStart(2, "0")}</span></span>
+            : <button type="button" className="btn btn-link btn-sm p-0" onClick={resendCode}>Resend code</button>}
+          <div className="text-muted mt-1">Check Spam / Promotions if it doesn&apos;t arrive in a minute.</div>
+        </div>
+      </div>
+    );
+  }
 
   if (view === "forgot") {
     return (
@@ -171,9 +248,19 @@ export function AuthForm({ initialTab = "signup", onDone, compactHeader }: { ini
           </div>
         )}
         <div className="mb-3">
-          <label className="form-label" htmlFor="auth-id">Email or Mobile</label>
-          <input id="auth-id" className="form-control" value={identifier} onChange={(e) => setIdentifier(e.target.value)} autoComplete="username" placeholder="you@example.com or 98100 12345" required />
+          <label className="form-label" htmlFor="auth-id">{tab === "signup" ? "Email" : "Email or Mobile"}</label>
+          <input id="auth-id" type={tab === "signup" ? "email" : "text"} className="form-control" value={identifier} onChange={(e) => setIdentifier(e.target.value)} autoComplete={tab === "signup" ? "email" : "username"} placeholder={tab === "signup" ? "you@example.com" : "you@example.com or 98100 12345"} required />
+          {tab === "signup" && <div className="form-text">We&apos;ll email you a 6-digit code to confirm it&apos;s you.</div>}
         </div>
+        {tab === "signup" && (
+          <div className="mb-3">
+            <label className="form-label" htmlFor="auth-phone">Mobile</label>
+            <div className="input-group">
+              <span className="input-group-text">+91</span>
+              <input id="auth-phone" className="form-control font-mono" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))} autoComplete="tel-national" placeholder="98100 12345" required />
+            </div>
+          </div>
+        )}
         <div className="mb-3">
           <label className="form-label" htmlFor="auth-pw">Password</label>
           <div className="input-group">
@@ -193,7 +280,7 @@ export function AuthForm({ initialTab = "signup", onDone, compactHeader }: { ini
         </div>
         {error && <div className="alert alert-danger small py-2" role="alert">{error}</div>}
         <button type="submit" className="btn btn-primary w-100 py-2" disabled={busy}>
-          {busy && <span className="spinner-border spinner-border-sm me-2" />}{tab === "signup" ? "Create account" : "Sign in"}
+          {busy && <span className="spinner-border spinner-border-sm me-2" />}{tab === "signup" ? "Continue" : "Sign in"}
         </button>
         <p className="small text-muted text-center mt-3 mb-0"><i className="bi bi-lock me-1" />We never share your details.</p>
         {SHOW_DEMO && tab === "signin" && (
