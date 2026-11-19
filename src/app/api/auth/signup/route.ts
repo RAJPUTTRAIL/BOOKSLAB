@@ -1,4 +1,4 @@
-import { NextResponse, after } from "next/server";
+import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { connectDB } from "@/lib/mongo";
@@ -9,7 +9,7 @@ import { parseIdentifier } from "@/lib/auth/identifier";
 import { publicUser } from "@/lib/auth/public-user";
 import { passwordSchema } from "@/lib/auth/password";
 import { logSecurity } from "@/lib/security-log";
-import { diagnostics, exposeEmailDiagnostics, sendEmail, type EmailResult } from "@/lib/email";
+import { sendEmail } from "@/lib/email";
 import { welcomeEmail } from "@/lib/email-templates";
 
 const schema = z.object({
@@ -30,13 +30,16 @@ export const POST = handle(async (req: Request) => {
   const user = (await findUserById(String(created._id)))!;
   await createSession({ id: user.id, role: user.role ?? "customer", name: user.name, tokenVersion: user.tokenVersion });
   await logSecurity("SIGNUP", { userId: user.id, identifier: data.identifier, detail: "Account created and signed in" });
-  // Welcome email. In development we wait for Resend so the response says exactly what happened;
-  // in production it's sent after the response so sign-up never waits on email.
-  let email: EmailResult | null = null;
+  // Welcome email via Resend. Awaited, but sign-up never fails because of email: sendEmail never
+  // throws and already logs Resend's exact error (with the fix) in the server console.
+  let welcomeEmailSent = false;
   if (user.email) {
-    const send = () => sendEmail({ to: user.email!, tag: "welcome", ...welcomeEmail({ name: user.name, identifier: user.email! }) });
-    if (exposeEmailDiagnostics()) email = await send();
-    else after(send);
+    const r = await sendEmail({
+      to: user.email, tag: "welcome",
+      ...welcomeEmail({ name: user.name, email: user.email, phone: user.phone ?? null, createdAt: (user as unknown as { createdAt: Date }).createdAt }),
+    });
+    welcomeEmailSent = r.sent;
+    if (!r.sent && !r.printed) await logSecurity("WELCOME_EMAIL_FAILED", { userId: user.id, identifier: user.email, detail: `${r.code}: ${r.reason}` });
   }
-  return NextResponse.json({ ok: true, user: publicUser(user), ...(email ? { email: diagnostics(email) } : {}) });
+  return NextResponse.json({ ok: true, user: publicUser(user), welcomeEmailSent });
 });

@@ -28,7 +28,7 @@ To reseed at any time, run `npm run seed`, or with the dev server running: `curl
 |---|---|
 | `MONGODB_URI` | MongoDB connection string including the database name, e.g. `mongodb://127.0.0.1:27017/bookslab` or `mongodb+srv://user:pass@cluster.mongodb.net/bookslab?retryWrites=true&w=majority`. Never commit it. On Atlas, allow your IP under **Network Access**. |
 | `AUTH_SECRET` | 32+ random characters, used to sign session cookies |
-| `RESET_CODE_PREVIEW` | `"true"` shows forgot-password codes in the sign-in modal and server console for local testing; set `"false"` in production |
+| `EMAIL_CONSOLE_FALLBACK` | Without `RESEND_API_KEY`, print emails to the terminal instead of failing. Default: on in development, off in production. |
 | `RESEND_API_KEY` | Resend API key for transactional email (password-reset codes, order confirmations). Without it, emails are logged to the terminal. |
 | `EMAIL_FROM` | Sender, default `Bookslab <onboarding@resend.dev>` — that sender only delivers to your own Resend account email; verify a domain at resend.com/domains to email customers. |
 | `CONTACT_TO` | Inbox for contact-form messages (Reply-To is the customer). With `onboarding@resend.dev` it must be your Resend account email. |
@@ -83,7 +83,7 @@ To reseed at any time, run `npm run seed`, or with the dev server running: `curl
 - **Helper:** `src/lib/email.ts` → `sendEmail({ to, subject, html, text, replyTo?, tag? })`. Never throws; returns `{ sent: true, id }` or `{ sent: false, reason }`. Without a real `RESEND_API_KEY` (or with the `re_123456789` placeholder) it prints the email to the terminal instead.
 - **Templates:** `src/lib/email-templates.ts` — password-reset code, order confirmation, contact-form notification (HTML + plain text).
 - **Contact form:** `/contact` → `POST /api/contact` (zod-validated in `src/lib/contact.ts`, honeypot, 5 messages per email/IP per hour). Each message is saved to `ContactMessage` first (with `emailed` / `emailError`), then emailed to `CONTACT_TO` with Reply-To set to the customer.
-- **Sign-up** sends a welcome email; **Forgot password** emails the reset code. In development the API response includes an `email` report (`sent`, `error`, `code`, `hint`) and the reset modal shows why an email wasn't delivered; in production replies stay identical for every input and failures are logged (`[email] ✗ …` with a fix).
+- **Sign-up** sends a "Welcome to Bookslab" email (account details + CP store / support info); sign-up never fails because of email. **Forgot password** emails the 6-character code — it is never shown on screen or returned by the API. If Resend refuses (unverified domain, bad key, rate limit) the customer sees a helpful "couldn't send" message and the server logs Resend's exact error plus a fix (`[email] ✗ …`).
 - **Test:** `npm run email:test -- you@example.com` sends a sample welcome + reset email and prints Resend's exact response (`delivered@resend.dev` is Resend's safe test inbox).
 - **Resend setup:** create an API key at resend.com/api-keys (Sending access). `onboarding@resend.dev` only delivers to your own account email — add and verify your domain at resend.com/domains (DNS: SPF, DKIM, optional DMARC), then set `EMAIL_FROM="Bookslab <orders@yourdomain.in>"`.
 

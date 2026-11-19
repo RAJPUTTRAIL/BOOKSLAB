@@ -9,8 +9,6 @@ export const RESET_TTL_MIN = 15;
 export const RESET_MAX_ATTEMPTS = 5;
 export const RESET_COOLDOWN_SEC = 30;
 
-/** Show the code in the UI / server console instead of sending it (local testing only). */
-export const resetPreview = () => process.env.RESET_CODE_PREVIEW === "true";
 
 // No 0/O, 1/I/L — easy to read back from a screen or SMS.
 const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";

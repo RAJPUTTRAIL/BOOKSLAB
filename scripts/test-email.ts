@@ -25,7 +25,7 @@ async function main() {
   console.log("");
   let failed = 0;
   for (const [label, msg] of [
-    ["Welcome (sign-up)", welcomeEmail({ name: "Bookslab Test", identifier: to })],
+    ["Welcome (sign-up)", welcomeEmail({ name: "Bookslab Test", email: to, phone: null, createdAt: new Date() })],
     ["Password reset", resetCodeEmail({ name: "Bookslab Test", code: "TEST42", ttlMinutes: 15 })],
   ] as const) {
     const r = await sendEmail({ to, tag: "test", ...msg });

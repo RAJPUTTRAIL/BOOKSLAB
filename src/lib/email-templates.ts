@@ -21,7 +21,7 @@ function layout(title: string, body: string) {
 }
 
 export function resetCodeEmail(p: { name: string; code: string; ttlMinutes: number }) {
-  const subject = `Your Bookslab password reset code: ${p.code}`;
+  const subject = "Your Bookslab password reset code"; // the code is only in the body, so it never shows up in server logs
   const html = layout(subject, `
     <h1 style="font-size:18px;margin:0 0 12px;">Reset your password</h1>
     <p style="margin:0 0 16px;line-height:1.6;">Hello ${esc(p.name.split(" ")[0])}, use this code to set a new password:</p>
@@ -112,19 +112,36 @@ export function contactNotificationEmail(c: ContactEmailInput) {
   return { subject, html, text };
 }
 
-export function welcomeEmail(p: { name: string; identifier: string }) {
+export function welcomeEmail(p: { name: string; email: string; phone: string | null; createdAt: Date }) {
   const first = p.name.split(" ")[0];
-  const subject = `Welcome to Bookslab, ${first}`;
+  const subject = `Welcome to Bookslab, ${first} — your account is ready`;
+  const joined = p.createdAt.toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Kolkata" });
+  const detail = (k: string, v: string) => `<div style="font-size:14px;padding:3px 0;"><span style="color:#64748B;display:inline-block;width:110px;">${k}</span>${esc(v)}</div>`;
   const html = layout(subject, `
-    <h1 style="font-size:18px;margin:0 0 12px;">Welcome, ${esc(first)}</h1>
-    <p style="margin:0 0 14px;line-height:1.6;">Your Bookslab account is ready. You sign in with <strong>${esc(p.identifier)}</strong> and your password.</p>
+    <h1 style="font-size:18px;margin:0 0 12px;">Welcome to Bookslab, ${esc(first)}</h1>
+    <p style="margin:0 0 16px;line-height:1.6;">Your account has been created. Here are the details we have for you:</p>
+    <div style="background:#F3F2EE;border-radius:8px;padding:12px 14px;margin-bottom:18px;">
+      ${detail("Name", p.name)}${detail("Sign-in email", p.email)}${p.phone ? detail("Mobile", p.phone) : ""}${detail("Member since", joined)}
+    </div>
+    <p style="margin:0 0 8px;font-size:14px;font-weight:600;">What you can do</p>
     <ul style="margin:0 0 18px;padding-left:18px;line-height:1.8;font-size:14px;">
-      <li>Law, finance &amp; tax, academic and technology titles — current editions</li>
-      <li>Free pickup from our Connaught Place store, or delivery across Delhi NCR</li>
-      <li>Can&rsquo;t find a title? Our sourcing desk will find it for you</li>
+      <li>Order law, finance &amp; tax, academic and technology titles — current editions</li>
+      <li>Collect free from our Connaught Place store, or get delivery across Delhi NCR</li>
+      <li>Can&rsquo;t find a title? <a href="${SITE()}/request-book" style="color:#1B365D;">Request it</a> and our sourcing desk will find it</li>
     </ul>
-    <p style="margin:0;"><a href="${SITE()}/search" style="background:#1B365D;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:14px;display:inline-block;">Browse the catalog</a></p>
-    <p style="font-size:12px;color:#64748B;margin:18px 0 0;">Didn&rsquo;t create this account? Reply to this email and we&rsquo;ll look into it.</p>`);
-  const text = `Welcome to Bookslab, ${first}!\n\nYour account is ready. You sign in with ${p.identifier} and your password.\n\nBrowse the catalog: ${SITE()}/search\n\nDidn't create this account? Reply to this email.`;
+    <p style="margin:0 0 20px;"><a href="${SITE()}/search" style="background:#1B365D;color:#fff;text-decoration:none;padding:10px 18px;border-radius:8px;font-size:14px;display:inline-block;">Browse the catalog</a></p>
+    <div style="border-top:1px solid #E5E7EB;padding-top:14px;font-size:13px;line-height:1.7;color:#1E293B;">
+      <strong>Visit us:</strong> ${esc(STORE.name)}, ${esc(STORE.address)} · ${esc(STORE.hours)}<br>
+      <strong>Need help?</strong> Call ${esc(STORE.phone)}, email ${esc(STORE.email)}, or use our <a href="${SITE()}/contact" style="color:#1B365D;">contact form</a>.
+    </div>
+    <p style="font-size:12px;color:#64748B;margin:16px 0 0;">Didn&rsquo;t create this account? Contact us and we&rsquo;ll look into it.</p>`);
+  const text = [
+    `Welcome to Bookslab, ${first} — your account is ready.`, ``,
+    `Name: ${p.name}`, `Sign-in email: ${p.email}`, ...(p.phone ? [`Mobile: ${p.phone}`] : []), `Member since: ${joined}`, ``,
+    `Browse the catalog: ${SITE()}/search`, `Can't find a title? ${SITE()}/request-book`, ``,
+    `Visit us: ${STORE.name}, ${STORE.address} (${STORE.hours})`,
+    `Need help? Call ${STORE.phone}, email ${STORE.email}, or ${SITE()}/contact`, ``,
+    `Didn't create this account? Contact us and we'll look into it.`,
+  ].join("\n");
   return { subject, html, text };
 }

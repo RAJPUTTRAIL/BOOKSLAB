@@ -26,7 +26,14 @@ const resend = () => { const k = apiKey(); return k ? (client ??= new Resend(k))
 
 export type EmailResult =
   | { sent: true; id: string }
-  | { sent: false; reason: string; code: EmailErrorCode; hint: string };
+  | { sent: false; reason: string; code: EmailErrorCode; hint: string; printed?: boolean }; // printed: shown in the terminal instead (dev, no key)
+
+/**
+ * Without RESEND_API_KEY, print emails to the terminal instead of sending them. On by default in
+ * development only; never in production unless EMAIL_CONSOLE_FALLBACK="true" is set explicitly.
+ */
+export const emailConsoleFallback = () =>
+  process.env.EMAIL_CONSOLE_FALLBACK ? process.env.EMAIL_CONSOLE_FALLBACK === "true" : process.env.NODE_ENV !== "production";
 
 export type EmailErrorCode = "not_configured" | "sandbox_recipient" | "invalid_recipient" | "domain_not_verified" | "invalid_api_key" | "rate_limited" | "invalid_request" | "network" | "unknown";
 
@@ -54,8 +61,12 @@ export type EmailMessage = { to: string | string[]; subject: string; html: strin
 export async function sendEmail(msg: EmailMessage): Promise<EmailResult> {
   const r = resend();
   if (!r) {
+    if (!emailConsoleFallback()) {
+      console.error(`[email] ✗ Not sent "${msg.subject}" → ${[msg.to].flat().join(", ")}: RESEND_API_KEY is not set. Add it to the environment variables (and redeploy on Vercel).`);
+      return { sent: false, reason: "RESEND_API_KEY is not set", code: "not_configured", hint: "Add RESEND_API_KEY to .env.local (and to Vercel → Settings → Environment Variables), then restart / redeploy." };
+    }
     console.log(`\n┌──────── Email not sent (RESEND_API_KEY is missing) ────────\n│ To: ${[msg.to].flat().join(", ")}${msg.replyTo ? `\n│ Reply-To: ${msg.replyTo}` : ""}\n│ Subject: ${msg.subject}\n│\n${msg.text.split("\n").map((l) => `│ ${l}`).join("\n")}\n└────────────────────────────────────────────────────────────\n`);
-    return { sent: false, reason: "RESEND_API_KEY is not set", code: "not_configured", hint: "Add RESEND_API_KEY to .env.local (and to Vercel → Settings → Environment Variables), then restart / redeploy." };
+    return { sent: false, reason: "RESEND_API_KEY is not set", code: "not_configured", hint: "Add RESEND_API_KEY to .env.local (and to Vercel → Settings → Environment Variables), then restart / redeploy.", printed: true };
   }
   try {
     const { data, error } = await r.emails.send({
@@ -81,11 +92,3 @@ export async function sendEmail(msg: EmailMessage): Promise<EmailResult> {
 }
 
 export const emailConfigured = () => !!apiKey();
-
-/**
- * Whether API responses may include email delivery details. Dev only (or with RESET_CODE_PREVIEW):
- * in production, the forgot-password reply must stay identical for every input so it can't reveal
- * which emails have accounts — failures are still logged on the server.
- */
-export const exposeEmailDiagnostics = () => process.env.NODE_ENV !== "production" || process.env.RESET_CODE_PREVIEW === "true";
-export const diagnostics = (r: EmailResult) => (r.sent ? { sent: true, id: r.id } : { sent: false, error: r.reason, code: r.code, hint: r.hint });
