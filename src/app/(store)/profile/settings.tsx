@@ -1,0 +1,250 @@
+"use client";
+
+import Link from "next/link";
+import { useState } from "react";
+import { useApp, type SessionUser } from "@/components/providers";
+import { AddressModal, labelIcon } from "@/components/address-modal";
+import { Modal } from "@/components/ui/overlay";
+import type { Address } from "@/lib/address-schema";
+import { cn } from "@/lib/utils";
+
+type Profile = { name: string; email: string; phone: string };
+const localPhone = (p: string) => p.replace(/^\+91/, "");
+
+export function ProfileSettings({ initial, initialAddresses }: { initial: Profile; initialAddresses: Address[] }) {
+  const [profile, setProfile] = useState(initial); // latest saved details (used to pre-fill new addresses)
+  return (
+    <div className="container py-5" style={{ maxWidth: 880 }}>
+      <div className="d-flex flex-wrap justify-content-between align-items-end gap-2 mb-4">
+        <div>
+          <div className="eyebrow mb-1">My Profile & Addresses</div>
+          <h1 className="h3 mb-0">Edit your details</h1>
+          <p className="text-muted small mb-0">Keep your contact details and delivery addresses up to date for a faster checkout.</p>
+        </div>
+        <Link href="/my-orders" className="btn btn-light border btn-sm"><i className="bi bi-box-seam me-1" />My Orders</Link>
+      </div>
+      <div className="row g-4">
+        <div className="col-lg-7"><DetailsCard initial={initial} onSaved={setProfile} /></div>
+        <div className="col-lg-5"><PasswordCard /></div>
+        <div className="col-12"><AddressesCard initial={initialAddresses} owner={profile} /></div>
+      </div>
+    </div>
+  );
+}
+
+function DetailsCard({ initial, onSaved }: { initial: Profile; onSaved: (p: Profile) => void }) {
+  const { setUser, openAuth } = useApp();
+  const [form, setForm] = useState<Profile>({ name: initial.name, email: initial.email, phone: localPhone(initial.phone) });
+  const [saved, setSaved] = useState<Profile>(form);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<{ msg: string; field?: string } | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  const set = <K extends keyof Profile>(k: K, v: Profile[K]) => { setForm((f) => ({ ...f, [k]: v })); setSuccess(false); };
+  const dirty = JSON.stringify(form) !== JSON.stringify(saved);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true); setError(null); setSuccess(false);
+    try {
+      const res = await fetch("/api/user/profile", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form) });
+      const d = await res.json();
+      if (!res.ok) {
+        if (res.status === 401) { openAuth("signin", "/profile"); return; }
+        setError({ msg: d.error ?? "Couldn't save your details.", field: d.field });
+        return;
+      }
+      const next: Profile = { name: d.profile.name, email: d.profile.email, phone: localPhone(d.profile.phone) };
+      setForm(next); setSaved(next); setSuccess(true); onSaved(next);
+      setUser(d.user as SessionUser); // header name / identifier update immediately
+    } catch {
+      setError({ msg: "Couldn't save your details. Please try again." });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const invalid = (f: string) => error?.field === f;
+
+  return (
+    <form className="card rounded-4 h-100" onSubmit={submit} noValidate>
+      <div className="card-body p-4">
+        <h2 className="h5 mb-1">Personal details</h2>
+        <p className="small text-muted mb-4">You can sign in with either your email or your mobile number.</p>
+        {success && (
+          <div className="alert alert-success small py-2 d-flex gap-2 align-items-start" role="status">
+            <i className="bi bi-check-circle-fill" /><span>Your details have been saved.</span>
+          </div>
+        )}
+        <div className="mb-3">
+          <label className="form-label" htmlFor="p-name">Full Name</label>
+          <input id="p-name" className="form-control" value={form.name} onChange={(e) => set("name", e.target.value)} autoComplete="name" required />
+        </div>
+        <div className="row g-3 mb-3">
+          <div className="col-sm-6">
+            <label className="form-label" htmlFor="p-phone">Primary Phone Number</label>
+            <div className="input-group">
+              <span className="input-group-text">+91</span>
+              <input id="p-phone" className={cn("form-control font-mono", invalid("phone") && "is-invalid")} inputMode="tel" value={form.phone} onChange={(e) => set("phone", e.target.value.replace(/\D/g, "").slice(0, 10))} placeholder="98100 12345" autoComplete="tel-national" />
+            </div>
+          </div>
+          <div className="col-sm-6">
+            <label className="form-label" htmlFor="p-email">Email Address</label>
+            <input id="p-email" type="email" className={cn("form-control", invalid("email") && "is-invalid")} value={form.email} onChange={(e) => set("email", e.target.value.trim())} placeholder="you@example.com" autoComplete="email" />
+          </div>
+        </div>
+
+        {error && <div className="alert alert-danger small py-2 mt-3 mb-0" role="alert">{error.msg}</div>}
+      </div>
+      <div className="card-footer bg-transparent border-0 px-4 pb-4 pt-0 d-flex justify-content-end gap-2">
+        <button type="button" className="btn btn-light border" disabled={!dirty || busy} onClick={() => { setForm(saved); setError(null); }}>Discard changes</button>
+        <button type="submit" className="btn btn-primary" disabled={!dirty || busy}>{busy && <span className="spinner-border spinner-border-sm me-2" />}Save details</button>
+      </div>
+    </form>
+  );
+}
+
+function PasswordCard() {
+  const [cur, setCur] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
+  const ok = next.length >= 8 && /[A-Za-z]/.test(next) && /\d/.test(next);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(""); setSuccess(false);
+    if (!ok) return setError("Use at least 8 characters, including a letter and a number.");
+    if (next !== confirm) return setError("The two new passwords don't match.");
+    setBusy(true);
+    try {
+      const res = await fetch("/api/user/password", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ currentPassword: cur, newPassword: next, confirmPassword: confirm }) });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) return setError(d.error ?? "Couldn't change your password.");
+      setCur(""); setNext(""); setConfirm(""); setSuccess(true);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const type = show ? "text" : "password";
+  return (
+    <form className="card rounded-4 h-100" onSubmit={submit} noValidate>
+      <div className="card-body p-4">
+        <h2 className="h5 mb-1">Change Password</h2>
+        <p className="small text-muted mb-4">You&apos;ll stay signed in here; other devices will be signed out.</p>
+        {success && <div className="alert alert-success small py-2 d-flex gap-2" role="status"><i className="bi bi-check-circle-fill" /><span>Your password has been changed.</span></div>}
+        <div className="mb-3">
+          <label className="form-label" htmlFor="pw-cur">Current Password</label>
+          <input id="pw-cur" type={type} className="form-control" value={cur} onChange={(e) => { setCur(e.target.value); setSuccess(false); }} autoComplete="current-password" required />
+        </div>
+        <div className="mb-3">
+          <label className="form-label" htmlFor="pw-new">New Password</label>
+          <input id="pw-new" type={type} className="form-control" value={next} onChange={(e) => { setNext(e.target.value); setSuccess(false); }} autoComplete="new-password" required />
+          <div className={cn("form-text", next && (ok ? "text-success" : "text-warning-emphasis"))}>{next && ok ? <><i className="bi bi-check2 me-1" />Looks good</> : "At least 8 characters, with a letter and a number."}</div>
+        </div>
+        <div className="mb-3">
+          <label className="form-label" htmlFor="pw-confirm">Confirm New Password</label>
+          <input id="pw-confirm" type={type} className={cn("form-control", confirm && confirm !== next && "is-invalid")} value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" required />
+        </div>
+        <div className="form-check mb-3">
+          <input id="pw-show" type="checkbox" className="form-check-input" checked={show} onChange={(e) => setShow(e.target.checked)} />
+          <label className="form-check-label small" htmlFor="pw-show">Show passwords</label>
+        </div>
+        {error && <div className="alert alert-danger small py-2" role="alert">{error}</div>}
+        <button type="submit" className="btn btn-outline-primary w-100" disabled={busy || !cur || !next || !confirm}>{busy && <span className="spinner-border spinner-border-sm me-2" />}Update password</button>
+      </div>
+    </form>
+  );
+}
+
+function AddressesCard({ initial, owner }: { initial: Address[]; owner: Profile }) {
+  const { toast } = useApp();
+  const [list, setList] = useState(initial);
+  const [modal, setModal] = useState<{ open: boolean; editing: Address | null }>({ open: false, editing: null });
+  const [deleting, setDeleting] = useState<Address | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const call = async (url: string, init: RequestInit, success: string) => {
+    const res = await fetch(url, { headers: { "Content-Type": "application/json" }, ...init });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error ?? "Something went wrong.");
+    setList(d.addresses);
+    toast({ kind: "success", title: success });
+  };
+  const makeDefault = async (a: Address) => {
+    setBusy(a.id);
+    try { await call(`/api/user/addresses/${a.id}`, { method: "PATCH", body: JSON.stringify({ isDefault: true }) }, `${a.label} is now your default address`); }
+    catch (e) { toast({ kind: "danger", title: (e as Error).message }); }
+    finally { setBusy(null); }
+  };
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setBusy(deleting.id);
+    try { await call(`/api/user/addresses/${deleting.id}`, { method: "DELETE" }, "Address deleted"); setDeleting(null); }
+    catch (e) { toast({ kind: "danger", title: (e as Error).message }); }
+    finally { setBusy(null); }
+  };
+
+  return (
+    <div className="card rounded-4">
+      <div className="card-body p-4">
+        <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+          <div>
+            <h2 className="h5 mb-1">Saved delivery addresses</h2>
+            <p className="small text-muted mb-0">Your default address is pre-selected at checkout.</p>
+          </div>
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => setModal({ open: true, editing: null })}><i className="bi bi-plus-lg me-1" />Add New Address</button>
+        </div>
+        {list.length === 0 ? (
+          <div className="text-center border rounded-3 bg-paper py-4">
+            <i className="bi bi-geo-alt fs-3 text-muted" />
+            <p className="small text-muted mb-0 mt-2">No saved addresses yet. Add your Home, Office or College address for one-tap checkout.</p>
+          </div>
+        ) : (
+          <div className="row row-cols-1 row-cols-md-2 g-3">
+            {list.map((a) => (
+              <div className="col" key={a.id}>
+                <div className={cn("border rounded-3 p-3 h-100 d-flex flex-column", a.isDefault ? "border-primary bg-primary-subtle" : "bg-white")} data-address={a.label}>
+                  <div className="d-flex justify-content-between align-items-start mb-2">
+                    <span className="fw-semibold"><i className={`bi ${labelIcon(a.label)} me-2 text-primary`} />{a.label === "College" ? "College / Hostel" : a.label}</span>
+                    {a.isDefault && <span className="badge text-bg-primary">Default</span>}
+                  </div>
+                  <div className="small">{a.recipientName} · <span className="font-mono">{a.phone}</span></div>
+                  <div className="small text-muted flex-grow-1">{a.street}<br />{a.city}, {a.state} {a.pincode}</div>
+                  <div className="d-flex flex-wrap gap-2 mt-3">
+                    <button type="button" className="btn btn-light border btn-sm" onClick={() => setModal({ open: true, editing: a })}><i className="bi bi-pencil me-1" />Edit</button>
+                    <button type="button" className="btn btn-light border btn-sm" onClick={() => setDeleting(a)}><i className="bi bi-trash me-1" />Delete</button>
+                    {!a.isDefault && <button type="button" className="btn btn-outline-primary btn-sm ms-auto" disabled={busy === a.id} onClick={() => makeDefault(a)}>Set as Default</button>}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <AddressModal
+        open={modal.open}
+        editing={modal.editing}
+        defaults={{ name: owner.name, phone: owner.phone }}
+        forceDefault={list.length === 0}
+        onClose={() => setModal({ open: false, editing: null })}
+        onSaved={(addresses) => { setList(addresses); toast({ kind: "success", title: modal.editing ? "Address updated" : "Address saved" }); setModal({ open: false, editing: null }); }}
+      />
+      <Modal
+        open={!!deleting}
+        onClose={() => !busy && setDeleting(null)}
+        title="Delete this address?"
+        footer={<>
+          <button type="button" className="btn btn-light border" onClick={() => setDeleting(null)} disabled={!!busy}>Keep it</button>
+          <button type="button" className="btn btn-danger" onClick={confirmDelete} disabled={!!busy}>{busy && <span className="spinner-border spinner-border-sm me-2" />}Delete address</button>
+        </>}
+      >
+        {deleting && <p className="small mb-0"><strong>{deleting.label}</strong> — {deleting.street}, {deleting.city} {deleting.pincode}{deleting.isDefault && list.length > 1 ? <><br /><span className="text-muted">Your next saved address will become the default.</span></> : null}</p>}
+      </Modal>
+    </div>
+  );
+}
