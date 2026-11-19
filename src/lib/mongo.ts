@@ -14,7 +14,7 @@ export class DbUnavailableError extends Error {}
 export async function connectDB() {
   if (cache.conn) return cache.conn;
   const uri = process.env.MONGODB_URI;
-  if (!uri) throw new DbUnavailableError("MONGODB_URI is not set. Add it to .env.local (see .env.example).");
+  if (!uri) throw new DbUnavailableError("MONGODB_URI is not set. Add it to .env.local locally, or to your host's environment variables (e.g. Vercel → Settings → Environment Variables).");
   cache.promise ??= mongoose
     .connect(uri, { serverSelectionTimeoutMS: 8000, bufferCommands: false })
     .catch((e) => {

@@ -15,7 +15,7 @@ export async function DbNotice() {
     <div className="container mt-4">
       <div className="alert alert-warning small mb-0">
         {problem === "down" ? (
-          <><strong>Can&apos;t reach MongoDB.</strong> Check <code>MONGODB_URI</code> in <code>.env.local</code> and that the server (or Atlas cluster) is reachable, then reload.</>
+          <><strong>Can&apos;t reach MongoDB.</strong> {process.env.MONGODB_URI ? <>The database didn&apos;t respond — check that the Atlas cluster allows connections from this server (Atlas → Network Access), then reload.</> : <><code>MONGODB_URI</code> isn&apos;t set — add it to <code>.env.local</code> locally, or to your host&apos;s environment variables (Vercel → Settings → Environment Variables) and redeploy.</>}</>
         ) : (
           <><strong>The catalog is empty.</strong> Load the demo catalog with <code>npm run seed</code> or <code>curl -X POST http://localhost:3000/api/seed</code>.</>
         )}

@@ -24,7 +24,7 @@ export function handle<A extends unknown[]>(fn: (...args: A) => Promise<Response
       if (e instanceof mongoose.Error.CastError) return NextResponse.json({ error: "Record not found." }, { status: 404 });
       if (e instanceof DbUnavailableError || e instanceof mongoose.Error.MongooseServerSelectionError) {
         console.error(e);
-        return NextResponse.json({ error: "Database unavailable — check MONGODB_URI in .env.local and that MongoDB is reachable." }, { status: 503 });
+        return NextResponse.json({ error: "Database unavailable — check the MONGODB_URI environment variable and that MongoDB is reachable." }, { status: 503 });
       }
       console.error(e);
       return NextResponse.json({ error: "Something went wrong. Please try again." }, { status: 500 });
