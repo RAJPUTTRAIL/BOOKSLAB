@@ -7,7 +7,7 @@ import { handle } from "@/lib/api";
 import { findUserById } from "@/lib/auth/session";
 import { passwordSchema } from "@/lib/auth/password";
 import { sendVerificationCode, VERIFY_TTL_MIN } from "@/lib/auth/verify-email";
-import { emailConfigured, emailConsoleFallback } from "@/lib/email";
+import { emailConfigured, emailConsoleFallback, emailProblemLabel } from "@/lib/email";
 import { logSecurity } from "@/lib/security-log";
 import { STORE } from "@/lib/store-info";
 
@@ -54,7 +54,11 @@ export const POST = handle(async (req: Request) => {
   const r = await sendVerificationCode({ id: user.id, name: user.name, email: data.email, verificationOtpSentAt: user.verificationOtpSentAt });
   if (r.status === "failed") {
     await logSecurity("SIGNUP_EMAIL_FAILED", { userId, identifier: data.email, detail: `${r.result.sent ? "" : `${r.result.code}: ${r.result.reason}`}` });
-    return NextResponse.json({ error: `We couldn't send a verification email to ${data.email} right now. Please check the address and try again in a few minutes, or call the CP store on ${STORE.phone}.` }, { status: 502 });
+    const problem = r.result.sent ? null : emailProblemLabel(r.result.code);
+    return NextResponse.json(
+      { error: `We couldn't send a verification email to ${data.email} right now${problem ? ` (${problem})` : ""}. Please check the address and try again in a few minutes, or call the CP store on ${STORE.phone}.`, ...(problem ? { emailProblem: r.result.sent ? undefined : r.result.code } : {}) },
+      { status: 502 },
+    );
   }
   await logSecurity("SIGNUP_STARTED", { userId, identifier: data.email, detail: r.status === "sent" ? "Verification code emailed" : "Details updated; recent code still valid" });
   // Never include the code in the response — it only travels by email.

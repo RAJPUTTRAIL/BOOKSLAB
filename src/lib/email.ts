@@ -92,3 +92,15 @@ export async function sendEmail(msg: EmailMessage): Promise<EmailResult> {
 }
 
 export const emailConfigured = () => !!apiKey();
+
+/** Short, customer-safe description of a configuration problem (no raw Resend text — it can contain account details). */
+export function emailProblemLabel(code: EmailErrorCode): string | null {
+  switch (code) {
+    case "invalid_api_key": return "email service key is invalid";
+    case "domain_not_verified": return "sender domain isn't verified";
+    case "not_configured": return "email service isn't configured";
+    case "rate_limited": return "email sending limit reached";
+    case "network": return "email service unreachable";
+    default: return null; // recipient-specific problems are not described
+  }
+}
