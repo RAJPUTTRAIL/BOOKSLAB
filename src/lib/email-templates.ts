@@ -156,3 +156,44 @@ export function verifyEmailCode(p: { name: string; code: string; ttlMinutes: num
   const text = `Verify your Bookslab account\n\nHello ${p.name.split(" ")[0]}, your verification code is: ${p.code}\n\nIt expires in ${p.ttlMinutes} minutes. If you didn't try to create a Bookslab account, ignore this email.`;
   return { subject, html, text };
 }
+
+function codeBlock(code: string) {
+  return `<div style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:32px;font-weight:700;letter-spacing:.35em;background:#F3F2EE;border-radius:8px;padding:14px 0;text-align:center;">${esc(code)}</div>`;
+}
+
+/** Step 1 — sent to the CURRENT address. */
+export function emailChangeOldCode(p: { name: string; code: string; ttlMinutes: number }) {
+  const subject = "Confirm your current email to change your Bookslab email";
+  const html = layout(subject, `
+    <h1 style="font-size:18px;margin:0 0 12px;">Confirm it&rsquo;s you</h1>
+    <p style="margin:0 0 16px;line-height:1.6;">Hello ${esc(p.name.split(" ")[0])}, someone signed in to your Bookslab account asked to change its email address. Enter this code on your profile page to continue:</p>
+    ${codeBlock(p.code)}
+    <p style="margin:16px 0 0;font-size:13px;color:#64748B;line-height:1.6;">It expires in ${p.ttlMinutes} minutes. <strong style="color:#1E293B;">If this wasn&rsquo;t you, don&rsquo;t share the code</strong> — change your password from My Profile and contact us.</p>`);
+  const text = `Confirm it's you\n\nHello ${p.name.split(" ")[0]}, a request was made to change the email address on your Bookslab account.\nYour code: ${p.code} (expires in ${p.ttlMinutes} minutes)\n\nIf this wasn't you, don't share the code — change your password and contact us.`;
+  return { subject, html, text };
+}
+
+/** Step 2 — sent to the NEW address. */
+export function emailChangeNewCode(p: { name: string; code: string; ttlMinutes: number }) {
+  const subject = "Verify your new Bookslab email address";
+  const html = layout(subject, `
+    <h1 style="font-size:18px;margin:0 0 12px;">Verify your new email</h1>
+    <p style="margin:0 0 16px;line-height:1.6;">Hello ${esc(p.name.split(" ")[0])}, enter this code on your Bookslab profile page to make this your sign-in email:</p>
+    ${codeBlock(p.code)}
+    <p style="margin:16px 0 0;font-size:13px;color:#64748B;line-height:1.6;">It expires in ${p.ttlMinutes} minutes. If you didn&rsquo;t ask for this, you can ignore this email.</p>`);
+  const text = `Verify your new Bookslab email\n\nHello ${p.name.split(" ")[0]}, your code is: ${p.code}\nIt expires in ${p.ttlMinutes} minutes. If you didn't ask for this, ignore this email.`;
+  return { subject, html, text };
+}
+
+/** Security notice — sent to the OLD address after the change. */
+export function emailChangedNotice(p: { name: string; oldEmail: string; newEmail: string }) {
+  const subject = "Your Bookslab email address was changed";
+  const when = new Date().toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" });
+  const html = layout(subject, `
+    <h1 style="font-size:18px;margin:0 0 12px;">Your sign-in email was changed</h1>
+    <p style="margin:0 0 14px;line-height:1.6;">Hello ${esc(p.name.split(" ")[0])}, the email address on your Bookslab account was changed on ${esc(when)} IST.</p>
+    <div style="background:#F3F2EE;border-radius:8px;padding:12px 14px;font-size:14px;line-height:1.8;">Old: ${esc(p.oldEmail)}<br>New: <strong>${esc(p.newEmail)}</strong></div>
+    <p style="margin:14px 0 0;font-size:13px;line-height:1.6;">Other devices have been signed out. <strong>If you didn&rsquo;t make this change</strong>, call the CP store on ${esc(STORE.phone)} or write to ${esc(STORE.email)} straight away.</p>`);
+  const text = `Your Bookslab sign-in email was changed on ${when} IST.\nOld: ${p.oldEmail}\nNew: ${p.newEmail}\n\nOther devices have been signed out. If you didn't make this change, call ${STORE.phone} or write to ${STORE.email} straight away.`;
+  return { subject, html, text };
+}

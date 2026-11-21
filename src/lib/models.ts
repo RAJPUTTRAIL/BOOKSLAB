@@ -83,6 +83,14 @@ const userSchema = new Schema(
     verificationOtpExpires: { type: Date, default: null }, // 10 minutes
     verificationOtpAttempts: { type: Number, default: 0 },
     verificationOtpSentAt: { type: Date, default: null }, // 30-second resend cooldown
+    // Two-step email change: confirm the current email, then the new one
+    emailChangeStep: { type: String, enum: ["NONE", "VERIFY_OLD", "VERIFY_NEW"], default: "NONE" },
+    pendingNewEmail: { type: String, default: null, lowercase: true, trim: true },
+    emailChangeOtp: { type: String, default: null }, // bcrypt hash of the 6-digit code
+    emailChangeOtpExpires: { type: Date, default: null }, // 10 minutes
+    emailChangeOtpAttempts: { type: Number, default: 0 },
+    emailChangeOtpSentAt: { type: Date, default: null }, // 30-second resend cooldown
+    emailChangeStepExpires: { type: Date, default: null }, // VERIFY_NEW must be finished within 15 minutes
     // Forgot-password: bcrypt hash of a 6-character code, valid for 15 minutes
     resetPasswordToken: { type: String, default: null },
     resetPasswordExpires: { type: Date, default: null },

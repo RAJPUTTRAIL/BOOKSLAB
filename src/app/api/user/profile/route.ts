@@ -22,18 +22,20 @@ const schema = z
   })
   .refine((d) => d.email || d.phone, { message: "Keep at least an email address or a mobile number — you sign in with it.", path: ["email"] });
 
-/** Update name, email and primary phone. Email/phone must not belong to another account. Addresses: /api/user/addresses. */
+/**
+ * Update name and primary phone (phone must not belong to another account). The email can only be
+ * changed through the two-step /api/user/email-change flow. Addresses: /api/user/addresses.
+ */
 export const PUT = handle(async (req: Request) => {
   const user = await requireUser();
   const body = schema.parse(await req.json());
 
-  let email: string | null = null;
-  let phone: string | null = null;
-  if (body.email) {
-    const p = parseIdentifier(body.email);
-    if (!p || !("email" in p)) return NextResponse.json({ error: "Enter a valid email address.", field: "email" }, { status: 400 });
-    email = p.email;
+  const email: string | null = user.email ?? null;
+  if ((body.email || "").toLowerCase() !== (email ?? "").toLowerCase()) {
+    return NextResponse.json({ error: "To change your email, use “Change Email” — we'll confirm both your current and new address.", field: "email" }, { status: 400 });
   }
+  let phone: string | null = null;
+  if (!email && !body.phone) return NextResponse.json({ error: "Keep a mobile number — it's how you sign in.", field: "phone" }, { status: 400 });
   if (body.phone) {
     const p = parseIdentifier(body.phone);
     if (!p || !("phone" in p)) return NextResponse.json({ error: "Enter a valid 10-digit Indian mobile number.", field: "phone" }, { status: 400 });
@@ -41,12 +43,10 @@ export const PUT = handle(async (req: Request) => {
   }
 
   await connectDB();
-  if (email && (await User.exists({ email, _id: { $ne: user.id } }))) return NextResponse.json({ error: "That email is already registered to another account.", field: "email" }, { status: 409 });
   if (phone && (await User.exists({ phone, _id: { $ne: user.id } }))) return NextResponse.json({ error: "That mobile number is already registered to another account.", field: "phone" }, { status: 409 });
 
   const $set: Record<string, unknown> = { name: body.name };
   const $unset: Record<string, 1> = {};
-  if (email) $set.email = email; else $unset.email = 1; // unset (not null) keeps the partial unique index happy
   if (phone) $set.phone = phone; else $unset.phone = 1;
   await User.updateOne({ _id: user.id }, Object.keys($unset).length ? { $set, $unset } : { $set }); // unique indexes still guard races (→ 409)
 

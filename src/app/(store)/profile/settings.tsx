@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp, type SessionUser } from "@/components/providers";
 import { AddressModal, labelIcon } from "@/components/address-modal";
+import { OtpInput } from "@/components/auth/otp-input";
 import { Modal } from "@/components/ui/overlay";
 import type { Address } from "@/lib/address-schema";
 import { cn } from "@/lib/utils";
@@ -11,7 +12,9 @@ import { cn } from "@/lib/utils";
 type Profile = { name: string; email: string; phone: string };
 const localPhone = (p: string) => p.replace(/^\+91/, "");
 
-export function ProfileSettings({ initial, initialAddresses }: { initial: Profile; initialAddresses: Address[] }) {
+type ChangeState = { step: "NONE" | "VERIFY_OLD" | "VERIFY_NEW"; currentEmail: string | null; pendingNewEmail: string | null; resendIn: number };
+
+export function ProfileSettings({ initial, initialAddresses, initialEmailChange }: { initial: Profile; initialAddresses: Address[]; initialEmailChange: ChangeState }) {
   const [profile, setProfile] = useState(initial); // latest saved details (used to pre-fill new addresses)
   return (
     <div className="container py-5" style={{ maxWidth: 880 }}>
@@ -24,7 +27,7 @@ export function ProfileSettings({ initial, initialAddresses }: { initial: Profil
         <Link href="/my-orders" className="btn btn-light border btn-sm"><i className="bi bi-box-seam me-1" />My Orders</Link>
       </div>
       <div className="row g-4">
-        <div className="col-lg-7"><DetailsCard initial={initial} onSaved={setProfile} /></div>
+        <div className="col-lg-7"><DetailsCard initial={initial} onSaved={setProfile} emailChange={initialEmailChange} /></div>
         <div className="col-lg-5"><PasswordCard /></div>
         <div className="col-12"><AddressesCard initial={initialAddresses} owner={profile} /></div>
       </div>
@@ -32,9 +35,11 @@ export function ProfileSettings({ initial, initialAddresses }: { initial: Profil
   );
 }
 
-function DetailsCard({ initial, onSaved }: { initial: Profile; onSaved: (p: Profile) => void }) {
+function DetailsCard({ initial, onSaved, emailChange }: { initial: Profile; onSaved: (p: Profile) => void; emailChange: ChangeState }) {
   const { setUser, openAuth } = useApp();
   const [form, setForm] = useState<Profile>({ name: initial.name, email: initial.email, phone: localPhone(initial.phone) });
+  const [changing, setChanging] = useState(emailChange.step !== "NONE"); // resume a change in progress
+  const [emailChanged, setEmailChanged] = useState<string | null>(null);
   const [saved, setSaved] = useState<Profile>(form);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ msg: string; field?: string } | null>(null);
@@ -90,10 +95,30 @@ function DetailsCard({ initial, onSaved }: { initial: Profile; onSaved: (p: Prof
           </div>
           <div className="col-sm-6">
             <label className="form-label" htmlFor="p-email">Email Address</label>
-            <input id="p-email" type="email" className={cn("form-control", invalid("email") && "is-invalid")} value={form.email} onChange={(e) => set("email", e.target.value.trim())} placeholder="you@example.com" autoComplete="email" />
+            <div className="input-group">
+              <input id="p-email" type="email" className="form-control bg-light" value={form.email} placeholder="No email yet" readOnly aria-describedby="p-email-help" />
+              {!changing && <button type="button" className="btn btn-light border" onClick={() => setChanging(true)} data-change-email>{form.email ? "Change Email" : "Add Email"}</button>}
+            </div>
+            <div id="p-email-help" className="form-text">{form.email ? "Your sign-in email. Changing it needs a code from your current and new address." : "Add an email to receive order updates."}</div>
           </div>
         </div>
 
+        {changing && (
+          <EmailChangeFlow
+            initial={emailChange.step === "NONE" ? null : emailChange}
+            onCancel={() => setChanging(false)}
+            onChanged={(p, u) => {
+              const next: Profile = { name: p.name, email: p.email, phone: localPhone(p.phone) };
+              setForm((f) => ({ ...f, email: p.email })); setSaved((sv) => ({ ...sv, email: p.email })); onSaved({ ...next, name: saved.name, phone: saved.phone });
+              setUser(u as SessionUser); setChanging(false); setEmailChanged(p.email);
+            }}
+          />
+        )}
+        {emailChanged && (
+          <div className="alert alert-success small py-2 mt-3 d-flex gap-2 align-items-start" role="status" data-email-changed>
+            <i className="bi bi-check-circle-fill" /><span>Your email is now <strong>{emailChanged}</strong>. We&apos;ve let your previous address know, and other devices have been signed out.</span>
+          </div>
+        )}
         {error && <div className="alert alert-danger small py-2 mt-3 mb-0" role="alert">{error.msg}</div>}
       </div>
       <div className="card-footer bg-transparent border-0 px-4 pb-4 pt-0 d-flex justify-content-end gap-2">
@@ -245,6 +270,117 @@ function AddressesCard({ initial, owner }: { initial: Address[]; owner: Profile 
       >
         {deleting && <p className="small mb-0"><strong>{deleting.label}</strong> — {deleting.street}, {deleting.city} {deleting.pincode}{deleting.isDefault && list.length > 1 ? <><br /><span className="text-muted">Your next saved address will become the default.</span></> : null}</p>}
       </Modal>
+    </div>
+  );
+}
+
+/** Two-step email change: confirm the current address, then verify the new one. */
+function EmailChangeFlow({ initial, onCancel, onChanged }: {
+  initial: ChangeState | null;
+  onCancel: () => void;
+  onChanged: (profile: { name: string; email: string; phone: string }, user: unknown) => void;
+}) {
+  const [st, setSt] = useState<ChangeState | null>(initial);
+  const [code, setCode] = useState("");
+  const [newEmail, setNewEmail] = useState(initial?.pendingNewEmail ?? "");
+  const [resendIn, setResendIn] = useState(initial?.resendIn ?? 0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [note, setNote] = useState("");
+
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((x) => x - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
+
+  const call = async <T,>(path: string, body?: unknown): Promise<T> => {
+    const res = await fetch(`/api/user/email-change/${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.error ?? "Something went wrong. Please try again.");
+    return j as T;
+  };
+  const run = async (fn: () => Promise<void>) => {
+    setBusy(true); setError("");
+    try { await fn(); } catch (e) { setError((e as Error).message); setCode(""); } finally { setBusy(false); }
+  };
+
+  // Start (or resend) step 1 when the flow opens without a change in progress.
+  const start = () => run(async () => {
+    const d = await call<ChangeState>("initiate");
+    setSt(d); setResendIn(d.resendIn); setCode(""); setNote(d.step === "VERIFY_OLD" ? "" : "");
+  });
+  useEffect(() => { if (!initial) start(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const verifyOld = (c = code) => run(async () => {
+    const d = await call<ChangeState>("verify-old", { code: c });
+    setSt(d); setCode(""); setResendIn(0); setNote("");
+  });
+  const sendNew = () => run(async () => {
+    const d = await call<ChangeState>("send-new-otp", { newEmail: newEmail.trim() });
+    setSt(d); setResendIn(d.resendIn); setCode(""); setNote(`Code sent to ${d.pendingNewEmail}.`);
+  });
+  const confirmNew = (c = code) => run(async () => {
+    const d = await call<{ profile: { name: string; email: string; phone: string }; user: unknown }>("confirm-new", { code: c });
+    onChanged(d.profile, d.user);
+  });
+  const cancel = async () => { await fetch("/api/user/email-change/cancel", { method: "POST" }).catch(() => {}); onCancel(); };
+
+  const resendLink = (onClick: () => void) =>
+    resendIn > 0
+      ? <span className="text-muted">Resend code in <span className="tabular" data-resend-timer>0:{String(resendIn).padStart(2, "0")}</span></span>
+      : <button type="button" className="btn btn-link btn-sm p-0" onClick={onClick} disabled={busy}>Resend code</button>;
+
+  const newSent = st?.step === "VERIFY_NEW" && !!st.pendingNewEmail;
+
+  return (
+    <div className="border rounded-3 bg-paper p-3 mt-3 fade-in" data-email-change={st?.step ?? "STARTING"}>
+      <div className="d-flex justify-content-between align-items-center mb-2">
+        <strong className="small">Change email address</strong>
+        <button type="button" className="btn btn-link btn-sm p-0 text-muted" onClick={cancel} disabled={busy}>Cancel</button>
+      </div>
+
+      {!st && <div className="small text-muted"><span className="spinner-border spinner-border-sm me-2" />Sending a security code…</div>}
+
+      {st?.step === "VERIFY_OLD" && (
+        <>
+          <p className="small mb-3">We sent a 6-digit security code to your current email (<strong data-old-email>{st.currentEmail}</strong>). It&apos;s valid for 10 minutes.</p>
+          <OtpInput value={code} onChange={(v) => { setCode(v); setError(""); }} onComplete={(v) => verifyOld(v)} disabled={busy} invalid={!!error} />
+          <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 small">
+            {resendLink(start)}
+            <button type="button" className="btn btn-primary btn-sm" disabled={busy || code.length !== 6} onClick={() => verifyOld()}>
+              {busy && <span className="spinner-border spinner-border-sm me-2" />}Verify Current Email
+            </button>
+          </div>
+        </>
+      )}
+
+      {st?.step === "VERIFY_NEW" && (
+        <>
+          {st.currentEmail && <span className="badge text-bg-success mb-3" data-old-verified><i className="bi bi-check-circle me-1" />Current email verified</span>}
+          <label className="form-label small" htmlFor="p-new-email">New Email Address</label>
+          <div className="input-group mb-2">
+            <input id="p-new-email" type="email" className="form-control" value={newEmail} onChange={(e) => { setNewEmail(e.target.value.trim()); setError(""); }} placeholder="new@example.com" autoComplete="email" disabled={busy} />
+            <button type="button" className="btn btn-outline-primary" onClick={sendNew} disabled={busy || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(newEmail) || (newSent && resendIn > 0 && newEmail === st.pendingNewEmail)}>
+              {newSent && newEmail === st.pendingNewEmail ? "Resend Code" : "Send Verification Code"}
+            </button>
+          </div>
+          {newSent && (
+            <>
+              <p className="small mb-2">{note || <>Enter the 6-digit code we sent to <strong>{st.pendingNewEmail}</strong>.</>}</p>
+              <OtpInput value={code} onChange={(v) => { setCode(v); setError(""); }} onComplete={(v) => confirmNew(v)} disabled={busy} invalid={!!error} />
+              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-3 small">
+                {resendIn > 0 ? resendLink(sendNew) : <span className="text-muted">Didn&apos;t get it? Check Spam, or resend above.</span>}
+                <button type="button" className="btn btn-primary btn-sm" disabled={busy || code.length !== 6} onClick={() => confirmNew()}>
+                  {busy && <span className="spinner-border spinner-border-sm me-2" />}Confirm &amp; Update Email
+                </button>
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {error && <div className="alert alert-danger small py-2 mt-3 mb-0" role="alert">{error}</div>}
     </div>
   );
 }
